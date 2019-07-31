@@ -1,0 +1,17 @@
+name: genecode-cr
+version: 0.1.0
+
+authors:
+  - Elia Franzella <eliafranzella@hotmail.it>
+
+targets:
+  genecode-cr:
+    main: src/genecode-cr.cr
+
+dependencies:
+  cli:
+    github: mosop/cli
+
+crystal: 0.29.0
+
+license: MIT
