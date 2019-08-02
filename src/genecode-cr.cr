@@ -30,6 +30,7 @@
 # THE SOFTWARE.
 
 require "cli"
+require "colorize"
 
 CodonStop   = %w[UAA UAG UGA]
 CodonLett   = %w[C A T G U]
@@ -56,7 +57,7 @@ Logo        =
                                  \\/_/ \\/_/   \\/_/
 "
 
-Wtf = "%s is a command-line crypting tool developed in Crystal which turns texts into
+Wtf = "%s is a command-line Caesar Cipher developed in Crystal which turns texts into
 DNA-RNA sections
 You can use the command \"%s --encode \"text here\" \" to codify
 an ordinary text, or decode DNA-RNA coded texts like \"TUAGUUUTUUGCGGUUTTACATUAUCAUCAATCUAA\".
@@ -68,17 +69,21 @@ with '--key' option or leave it random by omitting it.
 Enjoy!" % [ProgramName, PROGRAM_NAME, EngineSize - 1, PROGRAM_NAME]
 
 class String
-  # Function to convert any sort of string into a coded string
+  # Converts a string into a coded string
   def gene_encode(key : Int32, fail_silently : Bool = false)
     unless fail_silently
-      unless (errors = self.scan /.{0,2}[^#{EngineChars.join}\s]/).empty?
-        raise ArgumentError.new \
-          "Invalid characters for text to convert\nHere: %s" %
-          errors.map { |e| e[0] + "<~ " }.join
+      unless self.scan(/[^#{EngineChars.join}\\\s]/).empty?
+        errors = [] of Char | Colorize::Object(Char)
+
+        each_char do |c|
+          errors << (c.to_s =~ /[#{EngineChars.join}\\\s]/ ? c : c.colorize :yellow)
+        end
+
+        raise ArgumentError.new "Invalid characters for text to convert: %s" % errors.join
       end
     end
 
-    # ALGORITHM: cycle all codons rightwise *key* times
+    # ALGORITHM: cycles all codons rightwise *key* times
     engine = CodonRegl.clone
     (key % EngineSize).times do
       engine.unshift(engine.pop)
@@ -91,26 +96,30 @@ class String
       output = output + engine[imatch] unless imatch.nil?
     end
 
-    # Appends one random CodonStop to output array
+    # Appends one random CodonStop to output string
     output = output + CodonStop.sample unless output.empty?
     output
   end
 
+  # Reverts a string from a coded string
   def gene_decode(key : Int32, fail_silently : Bool = false)
     unless fail_silently
+      unless self =~ /^[ACGTU\s]*(UAA|UAG|UGA)$/
+        errors = [] of Char | Colorize::Object(Char)
+
+        each_char do |c|
+          errors << (c.to_s =~ /[ACGTU\s]/ ? c : c.colorize :yellow)
+        end
+
+        raise ArgumentError.new "Invalid format for DNA-RNA coded text: %s" % errors.join
+      end
+
       unless self =~ /(UAA|UAG|UGA)$/
         raise ArgumentError.new "Invalid format for DNA-RNA coded text: missing stop codon"
       end
-
-      unless (errors = self.scan /.{0,2}[^#{CodonLett.join}\s]/).empty?
-        raise ArgumentError.new(
-          "Invalid format for DNA-RNA coded text\nHere: %s" %
-          errors.map { |e| e[0] + "<~ " }.join
-        )
-      end
     end
 
-    # REVERSE ALGORITHM: cycle all codons leftwise *key* times
+    # REVERSE ALGORITHM: cycles all codons leftwise *key* times
     engine = EngineChars.clone
     (key % EngineSize).times do
       engine.push(engine.shift)
@@ -196,7 +205,7 @@ class GenecodeCr < Cli::Command
 
     if args.what?
       print "%s\n\t\t-{%s %s | Author: Elia Franzella}-\n\n%s\n" % [
-        Logo, ProgramName, Version, Wtf
+        Logo, ProgramName, Version, Wtf,
       ]
     end
   end

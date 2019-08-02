@@ -20,7 +20,7 @@ describe String do
 
   it "encodes self into rna-dna and decodes it back" do
     EngineSize.times do |i|
-      "Hello, world!".gene_encode(i).gene_decode(i).should eq("Hello, world!")
+      EngineChars.join.gene_encode(i).gene_decode(i).should eq EngineChars.join
     end
   end
 
