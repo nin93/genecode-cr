@@ -31,15 +31,15 @@
 
 require "cli"
 require "colorize"
+require "./string"
+require "./constants"
 
-CodonStop   = %w[UAA UAG UGA]
-CodonLett   = %w[C A T G U]
-CodonRegl   = (CodonLett * 3).permutations(3).uniq.map(&.join) - CodonStop
-EngineSize  = EngineChars.size
-EngineChars = (" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]" +
-               "^_`abcdefghijklmnopqrstuvwxyz{|}~¡«\n»¿ÀÁÈÉÌÍÒÓ×ÙÚàáèéìíòó÷ùú").chars
+include Genecode
+include Genecode::Constant
+include Genecode::Exception
+
 ProgramName = "Genecode XY"
-Version     = "3.2.4-cr"
+Version     = "3.3.5-cr"
 Logo        =
   "                                                       __
                                                       /\\ \\
@@ -68,77 +68,7 @@ with '--key' option or leave it random by omitting it.
 \"%s --help\" might be helpful now ;)
 Enjoy!" % [ProgramName, PROGRAM_NAME, EngineSize - 1, PROGRAM_NAME]
 
-class String
-  # Converts a string into a coded string
-  def gene_encode(key : Int32, fail_silently : Bool = false)
-    unless fail_silently
-      unless self.scan(/[^#{EngineChars.join}\\\s]/).empty?
-        errors = [] of Char | Colorize::Object(Char)
-
-        each_char do |c|
-          errors << (c.to_s =~ /[#{EngineChars.join}\\\s]/ ? c : c.colorize :yellow)
-        end
-
-        raise ArgumentError.new "Invalid characters for text to convert: %s" % errors.join
-      end
-    end
-
-    # ALGORITHM: cycles all codons rightwise *key* times
-    engine = CodonRegl.clone
-    (key % EngineSize).times do
-      engine.unshift(engine.pop)
-    end
-
-    # Iterative fetching right char to put into output
-    output = ""
-    self.each_char do |chr|
-      imatch = EngineChars.index &.==(chr)
-      output = output + engine[imatch] unless imatch.nil?
-    end
-
-    # Appends one random CodonStop to output string
-    output = output + CodonStop.sample unless output.empty?
-    output
-  end
-
-  # Reverts a string from a coded string
-  def gene_decode(key : Int32, fail_silently : Bool = false)
-    unless fail_silently
-      unless self =~ /^[ACGTU\s]*(UAA|UAG|UGA)$/
-        errors = [] of Char | Colorize::Object(Char)
-
-        each_char do |c|
-          errors << (c.to_s =~ /[ACGTU\s]/ ? c : c.colorize :yellow)
-        end
-
-        raise ArgumentError.new "Invalid format for DNA-RNA coded text: %s" % errors.join
-      end
-
-      unless self =~ /(UAA|UAG|UGA)$/
-        raise ArgumentError.new "Invalid format for DNA-RNA coded text: missing stop codon"
-      end
-    end
-
-    # REVERSE ALGORITHM: cycles all codons leftwise *key* times
-    engine = EngineChars.clone
-    (key % EngineSize).times do
-      engine.push(engine.shift)
-    end
-
-    # Grouping condons by 3
-    refined = self.scan(/\w{3}/).map(&.[0])
-    output = ""
-
-    refined.each do |cod|
-      imatch = CodonRegl.index &.==(cod)
-      output = output + engine[imatch] unless imatch.nil?
-    end
-
-    output
-  end
-end
-
-class GenecodeCr < Cli::Command
+class Main < Cli::Command
   version "v%s Crystal" % Version
 
   class Options
@@ -152,23 +82,44 @@ class GenecodeCr < Cli::Command
     string %w[-k --key],
       desc: "Key used for encoding or decoding",
       default: "random"
-    arg_array "text", desc: "STDIN is read if missing"
+    arg_array "text", desc: "standard input is read if missing"
   end
 
   class Help
-    title "Usage:\t#{PROGRAM_NAME} [-e|-d|-l|-u|-w] [-k <KEY>] [TEXT1 TEXT2 ...]"
+    title "Usage:\t#{PROGRAM_NAME} [-l|-u|-w] [(-e|-d) [-k <KEY>] [TEXT1 TEXT2 ...]]"
     header <<-EOS
       E.g.:\t#{PROGRAM_NAME} --key 37 --encode "I'm a text" "Me too!"
       \t#{PROGRAM_NAME} --encode "I'm encoding with a random key!"
-      \t#{PROGRAM_NAME} --decode -k 93 TUUGGUUACUACUTCAUTACAUGUUTCUTTUACGGTATCUGA
+      \t#{PROGRAM_NAME} --decode -k 93 TCCGTUUUAUUAUGGACTAACUCCUGGUGCUUAGTAAUGCACUGA
       EOS
     footer "(c) Elia Franzella - eliafranzella@hotmail.it"
   end
 
   def run
-    raise ArgumentError.new "Encoding - Decoding conflict" if args.e? && args.d?
+    if args.e? && args.d?
+      raise EDConflictError.new "Encoding - Decoding conflict"
+    end
 
     if args.encode?
+      text = unless args.text.empty?
+        args.text.join '\n'
+      else
+        stdin_read
+      end
+
+      # Encoding errors handling
+      unless args.unsafe?
+        unless text.scan(/[^#{EngineChars.join}\\\s]/).empty?
+          highlight = [] of Char | Colorize::Object(Char)
+
+          text.each_char do |c|
+            highlight << (c.to_s =~ /[#{EngineChars.join}\\\s]/ ? c : c.colorize :red)
+          end
+
+          raise InvalidCharError.new "Invalid characters for text to convert:\n%s" % highlight.join
+        end
+      end
+
       if args.key == "random"
         key = rand(EngineSize)
         STDERR.puts "[key: %d]" % key
@@ -176,32 +127,45 @@ class GenecodeCr < Cli::Command
         key = args.key.to_i % EngineSize
       end
 
-      unless args.text.empty?
-        args.text.each do |str|
-          puts str.gene_encode key, args.u?
-        end
-      else
-        puts stdin_read.gene_encode key, args.u?
-      end
+      puts text.gene_encode key
     end
 
     if args.decode?
       if args.key == "random"
-        raise "Key is required for that option."
+        raise KeyMissingError.new "Key is required for that option."
       else
         key = args.key.to_i % EngineSize
       end
 
-      unless args.text.empty?
-        args.text.each do |str|
-          puts str.gene_decode key, args.u?
-        end
+      text = unless args.text.empty?
+        args.text.join '\n'
       else
-        puts stdin_read.gene_decode key, args.u?
+        stdin_read
       end
+
+      # Decoding errors handling
+      unless args.unsafe?
+        unless text =~ /^[ACGTU\s]*$/
+          highlight = [] of Char | Colorize::Object(Char)
+
+          text.each_char do |char|
+            highlight << (char.to_s =~ /[ACGTU\s]/ ? char : char.colorize :red)
+          end
+
+          raise InvalidCodonError.new "Invalid format for DNA-RNA coded text:\n%s" % highlight.join
+        end
+
+        unless text =~ /(UAA|UAG|UGA)$/
+          raise StopCodonMissingError.new "Invalid format for DNA-RNA coded text: missing stop codon"
+        end
+      end
+
+      puts text.gene_decode key
     end
 
-    puts "Available characters:\n#{EngineChars}" if args.list?
+    if args.list?
+      puts "Available characters:\n#{EngineChars}"
+    end
 
     if args.what?
       print "%s\n\t\t-{%s %s | Author: Elia Franzella}-\n\n%s\n" % [
@@ -211,17 +175,34 @@ class GenecodeCr < Cli::Command
   end
 
   private def stdin_read
-    out = ""
-    while (in = gets(chomp: false)) != nil
-      out = out + in unless in.nil?
+    output = ""
+
+    while (in_ = gets(chomp: false)) != nil
+      unless in_.nil?
+        output = output + in_
+      end
     end
-    out
+
+    output
   end
 end
 
-begin
-  GenecodeCr.run ARGV
-rescue err
-  STDERR.puts "%s: %s" % [PROGRAM_NAME, err]
-  exit 1
-end
+{% begin %}
+  begin
+    Main.run ARGV
+{%
+  errors = [
+    [ArgumentError, 2],
+    [EDConflictError, 8], [KeyMissingError, 9],
+    [InvalidCharError, 16], [InvalidCodonError, 17], [StopCodonMissingError, 18],
+  ]
+%}
+
+{% for error in errors %}
+  rescue e : {{error[0].id}}
+    STDERR.puts "%s: %s" % [PROGRAM_NAME, e]
+    STDERR.puts "Program ended with exit code {{error[1].id}}"
+    exit {{error[1].id}}
+{% end %}
+  end
+{% end %}
