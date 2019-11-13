@@ -3,7 +3,7 @@
 # genecode-cr
 
 Genecode XY is a command-line Caesar Cipher developed in Crystal which turns texts into [DNA](https://en.wikipedia.org/wiki/DNA.)-[RNA](https://en.wikipedia.org/wiki/RNA) sections.
-You can use the command `genecode-cr --encode "text here"` to codify an ordinary text, or decode DNA-RNA coded texts like "TUAGUUUTUUGCGGUUTTACATUAUCAUCAATCUAA".
+You can use the command `genecode-cr --encode "text here"` to codify an ordinary text, or decode DNA-RNA coded texts like "TCTGCCUCGUCTGTUUGCAACTCTUATUATAUGUGA".
 
 You will need a key to both encode or decode a text. Crypted texts have unique key, of course, but you can choose one from 0 up to 121 for encoding with `--key` option or leave it random by omitting it.
 
@@ -25,69 +25,77 @@ Then:
 ```bash
 git clone https://github.com/nin93/genecode-cr.git
 cd genecode-cr
-shards build --release
-### Optional: your binary is in bin/
+shards build --release --no-debug
+# Optional: your binary is in bin/
 sudo cp ./bin/genecode-cr /usr/local/bin/
 ```
 
 ## Usage
 ```
-genecode-cr [-e|-d|-l|-u|-w] [-k <KEY>] [TEXT1 TEXT2 ...]
+genecode-cr [-l|-u|-w] [(-e|-d) [-k <KEY>] [TEXT1 TEXT2 ...]]
 ```
 Multiple text are allowed.
+
 Standard input is read if no TEXT is given:
 ```
-echo "foo" "bar" | genecode-cr -e -k 11
-
-### Output:
-# TATTUTTUTUTTTACTCTTTAGTAUAG
+$ echo "foo" "bar" | genecode-cr -e -k 11
+TUCTCUTCUUGCTUGTACTTTGGTUAG
 ```
 
 ### Encoding
 
 You can encode a text without specifying the key, genecode-cr will provide it in that case.
 ```
-genecode-cr -e "I'm encoding with a random key!"
-
-### Output:
-# [key: 3]
-# AGACAATTTUUTTUAGCATGGGCTTUCTTCGCATUTUUTGAGTTCGATTUUUUTTGUUUTGCGTGUGCATUCGCTTTTUUTTTGTUAGTAUUGUAA
+$ genecode-cr --encode "I'm encoding with a random key!"
+[key: 3]
+AGUCACTTCUTATCTGAGTGCGATTCGTTGGAGTCUUTAGUCTTGGUTTCCUTATGAUTAGACTGAGAGTCGGATTTCUTATTATCTGGTUTUUGA
 ```
-Every ASCII printable character is allowed, even newline char. For complete list type `genecode-cr --list`. You can nevertheless go ahead and skip error parsing by including `--unsafe` option.
+Every ASCII printable character is allowed, even newline char. For complete list type `genecode-cr --list`. You can nevertheless go ahead and skip text parsing by including `--unsafe` option.
 
-**NOTE**: key shows up in standard error output for reasons of clean input-output pipe.
+**NOTE**: key shows up in standard error output.
 
 ### Decoding
 
-You must provide a key in order to decode a text.
+Decoding is as simple as encoding.
+You must provide a key in order to decode a text:
 ```
-genecode-cr -d -k 96 TUGACGUCUGGCGGCGUUACGGUAACGUCTGGCUGGUAG
-
-### Output:
-# I need a key
+$ genecode-cr --decode -k 17 CTCUUATGTTAATAATATUUAATUUUATUUTAATTAUUUUAA
+I need a key
 ```
 Here text format is highly restricted and so do the error parsing, but you won't worry about that if texts come out from genecode-cr itself.
 
+### Error handling
+Invalid characters will cause an exception raise.
 ```
-genecode-cr -d -k 60 UGGCUUCUUCUUCopsCACCUUAG
+$ genecode-cr -e "I'm a beautiful text" "but I can'ŧ handłe ev€ry cħaractær"
+genecode-cr: Invalid characters for text to convert:
+I'm a beautiful text
+but I can'ŧ handłe ev€ry cħaractær
+Program ended with exit code 16
+```
+Errors will appear in red:
+![](src/img/error.png)
 
-### Output:
-# genecode-cr: Invalid format for DNA-RNA coded text: UGGCUUCUUCUUCopsCACCUUAG
+Use `--unsafe` option avoid exception raising, but output might be broken:
+* Encoding
 ```
-![Errors will appear in orange:](src/img/error.png)
+$ genecode-cr -e --unsafe "I can'ŧ handłe ev€ry cħaractær"
+[key: 46]
+UTGGATCTTCCCAUAGUUGATAATCCCAUACTACTUGATCTUACGAGTACUGATCTTCCCAGTCCCCTTAGUAGTUAG
 ```
-genecode-cr -d -k 60 UGGCUUCUUCUUCCACCUUAG
-
-### Output:
-# Uooops
 ```
-
-You can still avoid this by including `--unsafe` option, but output might be broken:
+$ genecode-cr -d -k 46 UTGGATCTTCCCAUAGUUGATAATCCCAUACTACTUGATCTUACGAGTACUGATCTTCCCAGTCCCCTTAGUAGTUAG
+I can' hande evry caractr
 ```
-genecode-cr -d -k 60 UGGCUUCUUCUUCopsCACCUUAG -u
-
-### Output:
-# Uooos
+* Decoding
+```
+$ genecode-cr -d --unsafe -k 59 UCCCTGCTGCTGCooopsTGCTGCTTCTCUAG
+Uooo!!+%
+```
+It was:
+```
+$ genecode-cr -e -k 59 Uooooops
+UCCCTGCTGCTGCTGCTGCTTCTCUAG
 ```
 
 ## Contributing
