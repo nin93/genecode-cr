@@ -3,7 +3,7 @@ require "./spec_helper"
 describe String do
   it "encodes regular text" do
     "Hello, world!".gene_encode(0).should contain \
-      "AUCTUUGCTGCTGCGCGUCATGTUGCGGAUGCTTUTCAG"
+      "ACGTCCGATGATGACCGACAGGGAGACGUAGATTCUCAT"
   end
 
   it "encodes regularly in all keys" do
@@ -25,24 +25,28 @@ describe String do
   end
 
   it "encodes empty text" do
-    "".gene_encode(0).should eq("")
-  end
-
-  it "raises ArgumentError if text to encode has unvalid chars" do
-    expect_raises ArgumentError do
-      "¢".gene_encode(0)
+    EngineSize.times do |i|
+      "".gene_encode(i).should eq ""
     end
   end
 
-  it "raises ArgumentError if rna-dna coded text has unvalid format" do
-    expect_raises ArgumentError do
-      "SUCAUGA".gene_decode(0)
+  it "decodes empty text" do
+    EngineSize.times do |i|
+      "".gene_decode(i).should eq ""
     end
   end
 
-  it "raises ArgumentError if rna-dna coded text has not a stop codon" do
-    expect_raises ArgumentError do
-      "SUCA".gene_decode(0)
+  it "skips unvalid characters" do
+    EngineSize.times do |i|
+      "u".gene_decode(i).should eq ""
+      "AAAlua".gene_decode(i).size.should eq 1
+    end
+  end
+
+  it "skips unvalid characters" do
+    EngineSize.times do |i|
+      "¢".gene_encode(i).should eq("")
+      "valid¢".gene_encode(i).should contain "valid".gene_encode(i)[0..15]
     end
   end
 end
